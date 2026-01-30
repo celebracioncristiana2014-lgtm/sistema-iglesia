@@ -25,23 +25,14 @@ def conectar_google_sheets():
     
     try:
         # 1. Intentamos leer el JSON completo desde los Secretos (Nuevo Método)
-        # Esto busca una variable llamada 'google_json' en los secretos de Streamlit
         if "google_json" in st.secrets:
-            # Leemos el texto y lo convertimos a diccionario automáticamente
             json_str = st.secrets["google_json"]
             
-            # --- CORRECCIÓN DEL ERROR "INVALID CONTROL CHARACTER" ---
-            # strict=False permite que el sistema sea más tolerante con los saltos de línea (Enters)
-            # que a veces se cuelan al copiar y pegar.
+            # CORRECCIÓN DE ERRORES AL COPIAR/PEGAR
             creds_dict = json.loads(json_str, strict=False)
-            
-            # --- PARCHE DE SEGURIDAD (SOLUCIÓN AL ERROR DE LA LLAVE) ---
-            # A veces al copiar, los saltos de línea (\n) se quedan como texto literal
-            # y rompen la clave. Esta línea fuerza a que sean saltos reales.
             if 'private_key' in creds_dict:
                 creds_dict['private_key'] = creds_dict['private_key'].replace('\\n', '\n')
-            # -----------------------------------------------------------
-
+            
             creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
         
         # 2. Si no, buscamos el archivo local (Tu PC)
@@ -69,6 +60,9 @@ def obtener_datos(hoja_nombre):
             worksheet = sh.worksheet(hoja_nombre)
             data = worksheet.get_all_records()
             return pd.DataFrame(data)
+        except gspread.exceptions.WorksheetNotFound:
+            st.warning(f"⚠️ No encontré la pestaña '{hoja_nombre}' en Google Sheets. Por favor créala.")
+            return pd.DataFrame()
         except Exception:
             return pd.DataFrame()
     return pd.DataFrame()
@@ -90,7 +84,7 @@ def guardar_datos(hoja_nombre, lista_datos):
 # INTERFAZ DE USUARIO
 # ==========================================
 st.sidebar.title("☁️ Gestión Eclesial")
-menu = st.sidebar.radio("Navegación:", ["🏠 Inicio", "👥 Personas", "📊 Asistencia", "🎓 Educación"])
+menu = st.sidebar.radio("Navegación:", ["🏠 Inicio", "👥 Personas", "📊 Asistencia", "🎓 Educación", "📅 Calendario"])
 
 if menu == "🏠 Inicio":
     st.title("Bienvenido al Sistema Online")
@@ -168,3 +162,49 @@ elif menu == "🎓 Educación":
             st.cache_resource.clear()
             
     st.dataframe(obtener_datos("educacion"), use_container_width=True)
+
+# === MÓDULO RESTAURADO: CALENDARIO ===
+elif menu == "📅 Calendario":
+    st.title("📅 Calendario de Actividades")
+    
+    # Formulario para agregar evento
+    with st.expander("➕ Agregar Nuevo Evento"):
+        with st.form("nuevo_evento", clear_on_submit=True):
+            col1, col2 = st.columns(2)
+            fecha_evt = col1.date_input("Fecha del Evento")
+            hora_evt = col2.time_input("Hora")
+            nombre_evt = st.text_input("Nombre del Evento (Ej: Culto de Jóvenes, Bautismos)")
+            
+            if st.form_submit_button("Guardar Evento"):
+                if nombre_evt:
+                    # Guardamos en la hoja 'eventos'
+                    guardar_datos("eventos", [str(fecha_evt), nombre_evt, str(hora_evt)])
+                    st.success("¡Evento agendado!")
+                    st.cache_resource.clear()
+                else:
+                    st.error("Escribe el nombre del evento.")
+
+    st.divider()
+    
+    # Mostrar Agenda
+    df_eventos = obtener_datos("eventos")
+    
+    if not df_eventos.empty:
+        st.subheader("📆 Próximos Eventos")
+        # Convertimos fecha para poder ordenar
+        try:
+            df_eventos['Fecha'] = pd.to_datetime(df_eventos['Fecha'])
+            df_eventos = df_eventos.sort_values('Fecha')
+            # Mostramos la tabla bonita
+            st.dataframe(
+                df_eventos, 
+                use_container_width=True,
+                column_config={
+                    "Fecha": st.column_config.DateColumn("Fecha", format="DD/MM/YYYY"),
+                    "Hora": st.column_config.TimeColumn("Hora", format="hh:mm a")
+                }
+            )
+        except Exception as e:
+            st.dataframe(df_eventos, use_container_width=True)
+    else:
+        st.info("No hay eventos próximos. Si acabas de agregar la pestaña 'eventos' en Google Sheets, agrega tu primer evento arriba.")
