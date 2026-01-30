@@ -30,6 +30,14 @@ def conectar_google_sheets():
             # Leemos el texto y lo convertimos a diccionario automáticamente
             json_str = st.secrets["google_json"]
             creds_dict = json.loads(json_str)
+            
+            # --- PARCHE DE SEGURIDAD (SOLUCIÓN AL ERROR DE LA LLAVE) ---
+            # A veces al copiar, los saltos de línea (\n) se quedan como texto literal
+            # y rompen la clave. Esta línea fuerza a que sean saltos reales.
+            if 'private_key' in creds_dict:
+                creds_dict['private_key'] = creds_dict['private_key'].replace('\\n', '\n')
+            # -----------------------------------------------------------
+
             creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
         
         # 2. Si no, buscamos el archivo local (Tu PC)
