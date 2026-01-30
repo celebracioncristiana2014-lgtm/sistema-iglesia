@@ -4,6 +4,7 @@ import gspread
 from oauth2client.service_account import ServiceAccountCredentials
 from datetime import datetime
 import plotly.express as px
+import json  # <--- Esta es la clave para el nuevo truco
 
 # ==========================================
 # CONFIGURACIÓN DE LA PÁGINA
@@ -15,33 +16,32 @@ st.set_page_config(
 )
 
 # ==========================================
-# CONEXIÓN INTELIGENTE (Detecta si es PC o Nube)
+# CONEXIÓN INTELIGENTE (Versión "Caja Fuerte")
 # ==========================================
 @st.cache_resource
 def conectar_google_sheets():
-    """Conecta con Google Sheets usando archivo local O secretos de la nube."""
+    """Conecta con Google Sheets usando archivo local O JSON String en la nube."""
     scope = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
     
     try:
-        # 1. Intentamos leer de los Secretos de la Nube (Streamlit Cloud)
-        # Esto funcionará cuando la app esté publicada en internet
-        if "gcp_service_account" in st.secrets:
-            creds_dict = dict(st.secrets["gcp_service_account"])
+        # 1. Intentamos leer el JSON completo desde los Secretos (Nuevo Método)
+        # Esto busca una variable llamada 'google_json' en los secretos de Streamlit
+        if "google_json" in st.secrets:
+            # Leemos el texto y lo convertimos a diccionario automáticamente
+            json_str = st.secrets["google_json"]
+            creds_dict = json.loads(json_str)
             creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
         
-        # 2. Si no hay secretos, buscamos el archivo local (Tu PC)
-        # Esto funcionará cuando lo uses en tu computadora
+        # 2. Si no, buscamos el archivo local (Tu PC)
         else:
             creds = ServiceAccountCredentials.from_json_keyfile_name('credenciales.json', scope)
             
         client = gspread.authorize(creds)
-        
-        # Abre la hoja por su nombre EXACTO
         sheet = client.open("Sistema_Iglesia_DB")
         return sheet
         
     except FileNotFoundError:
-        st.error("🚨 ERROR: No encuentro el archivo 'credenciales.json' y tampoco hay configuración de Secretos.")
+        st.error("🚨 ERROR: No encuentro el archivo 'credenciales.json' local.")
         return None
     except Exception as e:
         st.error(f"🚨 Error de conexión: {e}")
@@ -57,9 +57,6 @@ def obtener_datos(hoja_nombre):
             worksheet = sh.worksheet(hoja_nombre)
             data = worksheet.get_all_records()
             return pd.DataFrame(data)
-        except gspread.exceptions.WorksheetNotFound:
-            st.error(f"No existe la pestaña '{hoja_nombre}' en Google Sheets.")
-            return pd.DataFrame()
         except Exception:
             return pd.DataFrame()
     return pd.DataFrame()
