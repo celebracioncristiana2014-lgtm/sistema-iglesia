@@ -29,7 +29,11 @@ def conectar_google_sheets():
         if "google_json" in st.secrets:
             # Leemos el texto y lo convertimos a diccionario automáticamente
             json_str = st.secrets["google_json"]
-            creds_dict = json.loads(json_str)
+            
+            # --- CORRECCIÓN DEL ERROR "INVALID CONTROL CHARACTER" ---
+            # strict=False permite que el sistema sea más tolerante con los saltos de línea (Enters)
+            # que a veces se cuelan al copiar y pegar.
+            creds_dict = json.loads(json_str, strict=False)
             
             # --- PARCHE DE SEGURIDAD (SOLUCIÓN AL ERROR DE LA LLAVE) ---
             # A veces al copiar, los saltos de línea (\n) se quedan como texto literal
